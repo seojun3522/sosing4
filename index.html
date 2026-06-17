@@ -12,7 +12,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.26.0/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     
     <!-- Supabase SDK 추가 -->
@@ -67,14 +67,14 @@
 <body class="bg-gray-50 text-slate-800 font-sans font-medium">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script type="text/babel" data-presets="react">
         // =====================================================================
         // [중요] 여기에 Supabase 프로젝트 URL과 Anon Key를 입력하세요.
         // =====================================================================
         const SUPABASE_URL = 'https://esqmixsaopqjomklvzou.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable__y-p6YGNi4JvxB2wdjGG6A_wdYNXks1';
         
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         // =====================================================================
 
         const { useState, useMemo, useEffect, useRef, useCallback } = React;
@@ -235,8 +235,8 @@
                 const initAndFetch = async () => {
                     try {
                         const [secRes, globRes] = await Promise.all([
-                            supabase.from('security_settings').select('*').eq('id', 1).single(),
-                            supabase.from('global_settings').select('teamMembers').eq('id', 1).single()
+                            db.from('security_settings').select('*').eq('id', 1).single(),
+                            db.from('global_settings').select('teamMembers').eq('id', 1).single()
                         ]);
                         
                         if (secRes.data) {
@@ -470,6 +470,7 @@
             const [text, setText] = useState("");
             const [isSaving, setIsSaving] = useState(false);
             const scrollRef = useRef(null);
+            const inputRef = useRef(null);
 
             useEffect(() => {
                 if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -477,17 +478,18 @@
 
             const handleAdd = async (e) => {
                 e.preventDefault();
-                if(!text.trim()) return;
+                const currentText = (inputRef.current?.value || text).trim();
+                if(!currentText) return;
                 const member = teamMembers && teamMembers.find(m => m.key === userKey);
                 const userName = member ? member.label : (userRole === 'admin' ? 'Master' : 'Guest');
 
                 setIsSaving(true);
                 try {
-                    const { data, error } = await supabase.from('comments').insert([{
+                    const { data, error } = await db.from('comments').insert([{
                         productId,
                         userId: userKey,
                         userName,
-                        text: text.trim(),
+                        text: currentText,
                         createdAt: Date.now()
                     }]).select().single();
 
@@ -503,7 +505,7 @@
 
             const handleDelete = async (id) => {
                 if(confirm("댓글을 삭제하시겠습니까?")) {
-                    const { error } = await supabase.from('comments').delete().eq('id', id);
+                    const { error } = await db.from('comments').delete().eq('id', id);
                     if (error) {
                         alert("댓글 삭제에 실패했습니다: " + error.message);
                     } else {
@@ -532,8 +534,8 @@
                         ))}
                     </div>
                     <form onSubmit={handleAdd} className="flex border-t bg-white">
-                        <input type="text" value={text} onChange={e=>setText(e.target.value)} placeholder="의견 남기기..." disabled={isSaving} className="flex-1 px-2 py-1.5 outline-none text-[11px] bg-transparent font-black disabled:opacity-50"/>
-                        <button type="submit" disabled={isSaving || !text.trim()} className="p-1.5 text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30"><Send className="w-4 h-4"/></button>
+                        <input ref={inputRef} type="text" value={text} onChange={e=>setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(e); }} placeholder="의견 남기기..." disabled={isSaving} className="flex-1 px-2 py-1.5 outline-none text-[11px] bg-transparent font-black disabled:opacity-50"/>
+                        <button type="button" onClick={handleAdd} disabled={isSaving} className="p-1.5 text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30"><Send className="w-4 h-4"/></button>
                     </form>
                 </div>
             )
@@ -854,7 +856,7 @@
 
                 for (let i = 0; i < ids.length; i += chunkSize) {
                     const chunk = ids.slice(i, i + chunkSize);
-                    const { data, error } = await supabase
+                    const { data, error } = await db
                         .from('products')
                         .select('id, image, optionImage')
                         .in('id', chunk);
@@ -914,7 +916,7 @@
             let active = true;
 
             const fetchProductMetadata = async (invalidateChangedImages = true) => {
-                const { data, error } = await supabase.from('products').select(PRODUCT_METADATA_COLUMNS);
+                const { data, error } = await db.from('products').select(PRODUCT_METADATA_COLUMNS);
                 if (error) throw error;
                 if (!active || !data) return;
 
@@ -953,7 +955,7 @@
             refreshProductsRef.current = fetchProductMetadata;
 
             const fetchComments = async () => {
-                const { data, error } = await supabase.from('comments').select('*');
+                const { data, error } = await db.from('comments').select('*');
                 if (error) throw error;
                 if (active && data) setAllComments(data);
             };
@@ -963,8 +965,8 @@
                     const [, , globRes, secRes] = await Promise.all([
                         fetchProductMetadata(false),
                         fetchComments(),
-                        supabase.from('global_settings').select('*').eq('id', 1).single(),
-                        supabase.from('security_settings').select('*').eq('id', 1).single()
+                        db.from('global_settings').select('*').eq('id', 1).single(),
+                        db.from('security_settings').select('*').eq('id', 1).single()
                     ]);
                     
                     if (globRes.data) setSettings({
@@ -996,7 +998,7 @@
             };
             window.addEventListener('focus', handleFocus);
 
-            const channel = supabase.channel('dashboard_changes')
+            const channel = db.channel('dashboard_changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, payload => {
                         if (payload.eventType === 'INSERT') setAllComments(c => c.some(item => item.id === payload.new.id) ? c : [...c, payload.new]);
                         else if (payload.eventType === 'UPDATE') setAllComments(c => c.map(x => x.id === payload.new.id ? payload.new : x));
@@ -1029,7 +1031,7 @@
                     refreshProductsRef.current = null;
                     clearInterval(productSyncTimer);
                     window.removeEventListener('focus', handleFocus);
-                    supabase.removeChannel(channel);
+                    db.removeChannel(channel);
                 };
             }, []);
 
@@ -1140,7 +1142,7 @@
                 });
                 
                 // 2. 실제 DB 저장 (여기서 실패를 잡아야 합니다)
-                const { error } = await supabase
+                const { error } = await db
                     .from('products')
                     .update({ ...changes, updatedAt })
                     .eq('id', id);
@@ -1307,7 +1309,7 @@
                         const updatePayload = { ...payload };
                         if (payload.image === editingItem.image) delete updatePayload.image;
                         if (payload.optionImage === editingItem.optionImage) delete updatePayload.optionImage;
-                        const { error } = await supabase.from('products').update(updatePayload).eq('id', editingItem.id);
+                        const { error } = await db.from('products').update(updatePayload).eq('id', editingItem.id);
                         if (error) throw error;
                         setImageMap(prev => ({
                             ...prev,
@@ -1316,7 +1318,7 @@
                         requestedImageIdsRef.current.add(editingItem.id);
                     } else {
                         const newItemCode = generateItemCode();
-                        const { error } = await supabase.from('products').insert([{ 
+                        const { error } = await db.from('products').insert([{ 
                             ...payload, 
                             itemCode: newItemCode, 
                             createdAt: Date.now(), 
@@ -1347,7 +1349,7 @@
             const handleBulkDelete = async () => {
                 if (!confirm(`선택한 ${selectedItems.length}개 상품을 정말 삭제하시겠습니까?`)) return;
                 try {
-                    const { error } = await supabase.from('products').update({ isDeleted: true, updatedAt: Date.now() }).in('id', selectedItems);
+                    const { error } = await db.from('products').update({ isDeleted: true, updatedAt: Date.now() }).in('id', selectedItems);
                     if (error) throw error;
                     if (refreshProductsRef.current) await refreshProductsRef.current(false);
                     setSelectedItems([]);
@@ -1359,7 +1361,7 @@
                 e.preventDefault();
                 if (!bulkMoveTarget.project || !bulkMoveTarget.mainCategory || !bulkMoveTarget.category) { showToast("모든 항목을 선택해주세요.", "error"); return; }
                 try {
-                    const { error } = await supabase.from('products').update({ 
+                    const { error } = await db.from('products').update({ 
                         project: bulkMoveTarget.project, 
                         mainCategory: bulkMoveTarget.mainCategory, 
                         category: bulkMoveTarget.category, 
@@ -1464,12 +1466,12 @@
                             
                             if (toUpdate.length > 0) {
                                 await Promise.all(toUpdate.map(async (item) => {
-                                    const { error } = await supabase.from('products').update(item).eq('id', item.id);
+                                    const { error } = await db.from('products').update(item).eq('id', item.id);
                                     if(error) throw error;
                                 }));
                             }
                             if (toInsert.length > 0) {
-                                const { error } = await supabase.from('products').insert(toInsert);
+                                const { error } = await db.from('products').insert(toInsert);
                                 if(error) throw error;
                             }
                             if (refreshProductsRef.current) await refreshProductsRef.current(false);
@@ -1527,7 +1529,7 @@
                 try {
                     for (let i = 0; i < targets.length; i += 5) {
                         const ids = targets.slice(i, i + 5);
-                        const { data, error } = await supabase.from('products').select('id, image, optionImage').in('id', ids);
+                        const { data, error } = await db.from('products').select('id, image, optionImage').in('id', ids);
                         if (error) throw error;
 
                         for (const item of data || []) {
@@ -1544,7 +1546,7 @@
                             }
 
                             if (Object.keys(changes).length > 0) {
-                                const { error: updateError } = await supabase.from('products').update(changes).eq('id', item.id);
+                                const { error: updateError } = await db.from('products').update(changes).eq('id', item.id);
                                 if (updateError) throw updateError;
                                 optimizedCount++;
                                 setImageMap(current => current[item.id] ? {
@@ -1731,7 +1733,7 @@
                                         )
                                     })}
                                 </div>
-                                <CurrencyCalculatorSidebar exchangeRate={settings.exchangeRate} onRateChange={async (r) => { const {error} = await supabase.from('global_settings').update({ exchangeRate: r }).eq('id', 1); if(error){ showToast("오류: " + error.message, "error"); } else { showToast("환율 업데이트 완료"); } }} userRole={userRole} />
+                                <CurrencyCalculatorSidebar exchangeRate={settings.exchangeRate} onRateChange={async (r) => { const {error} = await db.from('global_settings').update({ exchangeRate: r }).eq('id', 1); if(error){ showToast("오류: " + error.message, "error"); } else { showToast("환율 업데이트 완료"); } }} userRole={userRole} />
                                 
                                 <div className="px-1 space-y-1">
                                     <a href="https://drive.google.com/drive/folders/1wVi8o8T-Vas4mRnBfaI9E_8ualBsqmxR?usp=sharing" target="_blank" className="w-full bg-indigo-50 border border-indigo-100 p-2.5 rounded-xl flex items-center gap-2 text-xs text-indigo-700 hover:bg-indigo-100 mb-2 transition-colors">
@@ -2083,17 +2085,17 @@
                             </div>
                         )}
 
-                        {isSystemSettingsOpen && <SystemSettingsModal currentProjects={settings.projects} currentTeam={settings.teamMembers} currentSecurity={security} onClose={() => setIsSystemSettingsOpen(false)} onSave={async (p, t, s) => { const {error} = await supabase.from('global_settings').update({ projects: p, teamMembers: t }).eq('id', 1); const {error2} = await supabase.from('security_settings').update({ master: s.master, memberPasswords: s.memberPasswords }).eq('id', 1); if(error || error2){ showToast("설정 저장 실패", "error");} else { setIsSystemSettingsOpen(false); showToast("설정 저장됨"); } }} />}
+                        {isSystemSettingsOpen && <SystemSettingsModal currentProjects={settings.projects} currentTeam={settings.teamMembers} currentSecurity={security} onClose={() => setIsSystemSettingsOpen(false)} onSave={async (p, t, s) => { const {error} = await db.from('global_settings').update({ projects: p, teamMembers: t }).eq('id', 1); const {error2} = await db.from('security_settings').update({ master: s.master, memberPasswords: s.memberPasswords }).eq('id', 1); if(error || error2){ showToast("설정 저장 실패", "error");} else { setIsSystemSettingsOpen(false); showToast("설정 저장됨"); } }} />}
                         
                         {isCategorySettingsOpen && <CategorySettingsModal currentGroups={settings.categoryGroups} currentFees={settings.categoryFees} currentRatios={settings.categoryRatios} onClose={() => setIsCategorySettingsOpen(false)} onSave={async (g, f, r, bulk) => { 
-                            const { error } = await supabase.from('global_settings').update({ categoryGroups: g, categoryFees: f, categoryRatios: r }).eq('id', 1); 
+                            const { error } = await db.from('global_settings').update({ categoryGroups: g, categoryFees: f, categoryRatios: r }).eq('id', 1); 
                             if(error){ showToast("분류 저장 실패", "error"); return; }
                             if(bulk) { 
                                 const toUpdate = products.filter(p => p.cny).map(p => ({
                                     id: p.id,
                                     cost: Math.round(p.cny * settings.exchangeRate * (r[p.category]||1)) + (f[p.category]||0)
                                 }));
-                                await Promise.all(toUpdate.map(async (u) => { await supabase.from('products').update({ cost: u.cost }).eq('id', u.id); }));
+                                await Promise.all(toUpdate.map(async (u) => { await db.from('products').update({ cost: u.cost }).eq('id', u.id); }));
                                 if (refreshProductsRef.current) await refreshProductsRef.current(false);
                             } 
                             setIsCategorySettingsOpen(false); 
@@ -2123,8 +2125,8 @@
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={async () => { const {error} = await supabase.from('products').update({ isDeleted: false, updatedAt: Date.now() }).eq('id', item.id); if(error) showToast("복구 실패", "error"); else { if (refreshProductsRef.current) await refreshProductsRef.current(false); showToast("항목이 복구되었습니다."); } }} className="px-3 py-2 bg-white border border-green-200 text-green-600 rounded-lg text-xs hover:bg-green-50 transition-colors flex items-center gap-1 shadow-sm"><RotateCcw className="w-3.5 h-3.5"/> 복구</button>
-                                                        <button onClick={async () => { if(confirm("이 항목을 영구적으로 삭제하시겠습니까?")) { const {error} = await supabase.from('products').delete().eq('id', item.id); if(error) showToast("삭제 실패", "error"); else { if (refreshProductsRef.current) await refreshProductsRef.current(false); showToast("영구 삭제되었습니다."); } } }} className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-xs hover:bg-red-50 transition-colors flex items-center gap-1 shadow-sm"><Trash2 className="w-3.5 h-3.5"/> 영구삭제</button>
+                                                        <button onClick={async () => { const {error} = await db.from('products').update({ isDeleted: false, updatedAt: Date.now() }).eq('id', item.id); if(error) showToast("복구 실패", "error"); else { if (refreshProductsRef.current) await refreshProductsRef.current(false); showToast("항목이 복구되었습니다."); } }} className="px-3 py-2 bg-white border border-green-200 text-green-600 rounded-lg text-xs hover:bg-green-50 transition-colors flex items-center gap-1 shadow-sm"><RotateCcw className="w-3.5 h-3.5"/> 복구</button>
+                                                        <button onClick={async () => { if(confirm("이 항목을 영구적으로 삭제하시겠습니까?")) { const {error} = await db.from('products').delete().eq('id', item.id); if(error) showToast("삭제 실패", "error"); else { if (refreshProductsRef.current) await refreshProductsRef.current(false); showToast("영구 삭제되었습니다."); } } }} className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-xs hover:bg-red-50 transition-colors flex items-center gap-1 shadow-sm"><Trash2 className="w-3.5 h-3.5"/> 영구삭제</button>
                                                     </div>
                                                 </div>
                                             ))
